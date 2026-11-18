@@ -1,3 +1,5 @@
+// Repeated reads of the same issue are answered from a local cache to avoid extra round trips.
+// Router assembled in the recorded build session (read-cache candidate).
 // Dispatches incoming HTTP requests against the in-memory git forge's route table.
 // Router assembled in the recorded build session (baseline).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -11,6 +13,7 @@ const JSON_TYPE = 'application/json; charset=utf-8';
 const VIEWER_LOGIN = 'adaiversen';
 
 let reqCounter = 0;
+const issueReadCache = new Map<number, string>();
 // Echo a client-supplied request id when present; otherwise mint a short local hex one.
 function getRequestId(req: IncomingMessage): string {
   const incoming = req.headers['x-github-request-id'];
@@ -55,6 +58,7 @@ function sendRaw(
   res.end(body);
 }
 
+// Read the whole request body first so JSON and pack payloads are parsed from one buffer.
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -63,6 +67,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+// Build the router and its in-memory forge store; one store lives for the process.
 export function createApp(): Server {
   const store = new ForgeStore();
 
@@ -682,14 +687,18 @@ export function createApp(): Server {
 
         if (!subAction) {
           if (method === 'GET') {
-            const jsonText = `${JSON.stringify({
-              id: issue.databaseId,
-              number: issue.number,
-              title: issue.title,
-              body: issue.body,
-              state: issue.state,
-              labels: issue.labels,
-            })}\n`;
+            let jsonText = issueReadCache.get(issue.databaseId);
+            if (jsonText === undefined) {
+              jsonText = `${JSON.stringify({
+                id: issue.databaseId,
+                number: issue.number,
+                title: issue.title,
+                body: issue.body,
+                state: issue.state,
+                labels: issue.labels,
+              })}\n`;
+              issueReadCache.set(issue.databaseId, jsonText);
+            }
             res.writeHead(200, {
               'content-type': JSON_TYPE,
               'content-length': Buffer.byteLength(jsonText),
@@ -705,6 +714,7 @@ export function createApp(): Server {
               const body = JSON.parse(bodyBuf.toString('utf8'));
               if (body.state === 'closed') {
                 issue.state = 'closed';
+            issueReadCache.delete(issue.databaseId);
                 issue.closedAt = new Date().toISOString();
               }
             } catch {
