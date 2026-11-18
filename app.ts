@@ -1,3 +1,4 @@
+// Dispatches incoming HTTP requests against the in-memory git forge's route table.
 // Router assembled in the recorded build session (baseline).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
