@@ -1,3 +1,4 @@
+// Router assembled in the recorded build session (baseline).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { ForgeStore, type ForgeRepo, filesFromCommit } from './forge.ts';
@@ -9,12 +10,14 @@ const JSON_TYPE = 'application/json; charset=utf-8';
 const VIEWER_LOGIN = 'adaiversen';
 
 let reqCounter = 0;
+// Echo a client-supplied request id when present; otherwise mint a short local hex one.
 function getRequestId(req: IncomingMessage): string {
   const incoming = req.headers['x-github-request-id'];
   if (incoming) return String(incoming);
   return `${Date.now().toString(16)}-${(++reqCounter).toString(16)}`;
 }
 
+// Serialise a JSON body with a trailing newline and attach the request-id header.
 function sendJson(
   res: ServerResponse,
   status: number,
