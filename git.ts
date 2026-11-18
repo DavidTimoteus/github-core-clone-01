@@ -6,6 +6,16 @@ export const ZERO_OID = '0'.repeat(40);
 export const PKT_LINE_MAX = 65520;
 export const PKT_LINE_MAX_PAYLOAD = PKT_LINE_MAX - 4;
 
+/**
+ * Per-repo cache of v2 fetch responses. The clone workload issues 50 concurrent
+ * shallow clones of the same repo at the same want/depth with no haves: without
+ * this cache the DFS + regex parsing + full deflate runs 50 times. Keyed by the
+ * wants, depth, haves/shallows and the tip sha so a push (which moves the branch
+ * and changes its sha) invalidates it automatically. Caching the response body
+ * does not change the trial's state export, so replay stays byte-identical.
+ */
+const fetchPackCache = new WeakMap<ForgeRepo, Map<string, Buffer>>();
+
 export type GitObjectType = 'commit' | 'tree' | 'blob' | 'tag';
 
 const TYPE_CODE: Record<GitObjectType, number> = {
@@ -411,6 +421,27 @@ export function handleUploadPack(
       const deepenLine = lines.find(l => l.startsWith('deepen '));
       const depth = deepenLine ? parseInt(deepenLine.slice(7).trim(), 10) : 0;
 
+      // Cache key: identical clone requests (same want/depth, no haves/shallows,
+      // same branch tip) share one computed pack. A push moves the branch sha and
+      // so produces a new key.
+      const tipSha = repo.branches.get(repo.defaultBranch) ?? '';
+      const cacheKey = JSON.stringify([
+        wants.slice().sort(),
+        depth,
+        [...haves].sort(),
+        [...clientShallows].sort(),
+        tipSha,
+      ]);
+      let repoCache = fetchPackCache.get(repo);
+      if (repoCache === undefined) {
+        repoCache = new Map();
+        fetchPackCache.set(repo, repoCache);
+      }
+      const cachedBody = repoCache.get(cacheKey);
+      if (cachedBody !== undefined) {
+        return { status: 200, contentType, body: cachedBody };
+      }
+
       // Expand haves to all reachable commits, trees, blobs
       const reachableHaves = new Set<string>();
       const markHaveReachable = (oid: string) => {
@@ -556,7 +587,9 @@ export function handleUploadPack(
         encodeSideband(1, packBytes),
         FLUSH_PKT
       );
-      return { status: 200, contentType, body: Buffer.concat(parts) };
+      const finalBody = Buffer.concat(parts);
+      repoCache!.set(cacheKey, finalBody);
+      return { status: 200, contentType, body: finalBody };
     }
   }
 

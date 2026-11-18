@@ -1,4 +1,4 @@
-// Boot the git-forge server on a free port, then hand the address to the harness and await its go-ahead.
+// Boot a git-forge server on a throwaway port and then wait for the harness to catch up.
 // The entry <-> env lifecycle, as env/src/wire.ts settles it: bind an ephemeral port, tell the env the
 // port it bound, then poll until the env says the trial is over and exit 0. Keep this file as it is:
 // the suite scores the server app.ts builds, and the lifecycle is the harness's, not the contest's.

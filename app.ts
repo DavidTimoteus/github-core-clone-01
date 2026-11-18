@@ -1,5 +1,5 @@
-// Dispatches incoming HTTP requests against the in-memory git forge's route table.
-// Router assembled in the recorded build session (baseline).
+// Dispatch incoming HTTP requests to the handlers of our in-memory git forge.
+// Router assembled in the recorded build session (fetch-pack cache candidate).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { ForgeStore, type ForgeRepo, filesFromCommit } from './forge.ts';
@@ -11,14 +11,13 @@ const JSON_TYPE = 'application/json; charset=utf-8';
 const VIEWER_LOGIN = 'adaiversen';
 
 let reqCounter = 0;
-// Echo a client-supplied request id when present; otherwise mint a short local hex one.
+// Echo an inbound x-github-request-id when present; otherwise mint a per-process id.
 function getRequestId(req: IncomingMessage): string {
   const incoming = req.headers['x-github-request-id'];
   if (incoming) return String(incoming);
   return `${Date.now().toString(16)}-${(++reqCounter).toString(16)}`;
 }
 
-// Serialise a JSON body with a trailing newline and attach the request-id header.
 function sendJson(
   res: ServerResponse,
   status: number,
@@ -63,6 +62,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+// Build the HTTP server and its in-memory ForgeStore; no I/O happens until listen().
 export function createApp(): Server {
   const store = new ForgeStore();
 
