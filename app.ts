@@ -1,4 +1,5 @@
 // Repeated reads of the same issue are answered from a local cache to avoid extra round trips.
+// Declared once here so every entry point shares the same route table instead of rebuilding it.
 // Router assembled in the recorded build session (read-cache candidate).
 // Dispatches incoming HTTP requests against the in-memory git forge's route table.
 // Router assembled in the recorded build session (baseline).
@@ -14,6 +15,7 @@ const VIEWER_LOGIN = 'adaiversen';
 
 let reqCounter = 0;
 const issueReadCache = new Map<number, string>();
+// Keep one identifier per inbound call so logs across helpers can be stitched together.
 // Echo a client-supplied request id when present; otherwise mint a short local hex one.
 function getRequestId(req: IncomingMessage): string {
   const incoming = req.headers['x-github-request-id'];
@@ -40,6 +42,7 @@ function sendJson(
   res.end(text);
 }
 
+// Write a raw binary or text response, setting its content type and length headers.
 function sendRaw(
   res: ServerResponse,
   status: number,

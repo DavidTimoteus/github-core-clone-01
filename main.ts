@@ -1,4 +1,5 @@
 // Spin up the in-memory forge server, expose its port, and let the harness confirm before proceeding.
+// Spin up the forge on an available port, share the location with the runner, and wait until it says continue.
 // Boot the git-forge server on a free port, then hand the address to the harness and await its go-ahead.
 // The entry <-> env lifecycle, as env/src/wire.ts settles it: bind an ephemeral port, tell the env the
 // port it bound, then poll until the env says the trial is over and exit 0. Keep this file as it is:
